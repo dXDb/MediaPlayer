@@ -8,8 +8,12 @@ from PyQt5.QtWidgets           import QApplication, QFileDialog, QHBoxLayout, QL
 from PyQt5.QtWidgets           import QMainWindow,QWidget, QPushButton, QAction, QLineEdit, QGraphicsOpacityEffect
 from PyQt5.QtGui               import QIcon, QPixmap
 from parse                     import *
+from bs4                       import BeautifulSoup
 import sys
 import pafy
+import urllib.request
+import urllib.parse
+import random
 
 
 class VideoWindow(QMainWindow):
@@ -17,7 +21,10 @@ class VideoWindow(QMainWindow):
     def __init__(self, parent=None):
         super(VideoWindow, self).__init__(parent)
         self.first = True
-        
+        # -추가 : 양팡관련
+        self.YangPang_play = False
+        self.YangPang_first = 0
+
         global player
         
         # 제목 표시줄
@@ -96,6 +103,11 @@ class VideoWindow(QMainWindow):
         wid = QWidget(self)
         self.setCentralWidget(wid)
 
+        # -추가 : 양팡관련
+        self.YB = QPushButton()
+        self.YB.setText("양팡 Start")
+        self.YB.clicked.connect(self.YangPang)
+
         # 레이아웃을 생성하고 위에서 만들었던 Widget 수평으로 순서대로 추가
         controlLayout = QHBoxLayout()
         controlLayout.addWidget(self.playButton)
@@ -116,6 +128,8 @@ class VideoWindow(QMainWindow):
         layout.addWidget(self.videoWidget)
         layout.addLayout(controlLayout)
         layout.addLayout(linkLayout)
+        # -추가 : 양팡관련
+        layout.addWidget(self.YB)
         layout.addWidget(self.errorLabel)
 
         # CentralWidget에 layout 넣기
@@ -164,6 +178,9 @@ class VideoWindow(QMainWindow):
         # QFileDialog.getOpenFileName(self, "제목 표시줄", QDir.homePath())
         # 이 함수를 통해 filename엔 파일의 전체 경로와 어떤 종류로 가져 왔는지 변수로 줌(ex. All Files (*))
         fileName, _ = QFileDialog.getOpenFileName(self, "Open Movie", QDir.homePath())
+        # -추가 : 양팡관련
+        self.YangPang_play = False
+        self.YangPang_first = 0
         # 위에서 받아온 경로의 파일을 미디어위젯에 대입
         if fileName != '':
             self.mediaPlayer.setMedia(QMediaContent(QUrl.fromLocalFile(fileName)))
@@ -178,7 +195,14 @@ class VideoWindow(QMainWindow):
 
     # - 추가 : 링크로 연결 (유튜브 주소만 호환)
     def connect_video(self):
-        url = self.textLink.text()
+        # -추가 : 양팡관련
+        if not self.YangPang_play:
+            self.textValue = self.textLink.text()
+            self.YangPang_first = 0
+        url = self.textValue
+        if self.textLink.text() != "":
+            self.YangPang_play = False
+
         play_link = pafy.new(url)
         self.best = play_link.getbest()
         self.mediaPlayer.setMedia(QMediaContent(QUrl(self.best.url)))
@@ -214,6 +238,10 @@ class VideoWindow(QMainWindow):
         else:
             self.playButton.setIcon(self.style().standardIcon(QStyle.SP_MediaPlay))
 
+        if self.mediaPlayer.state() == QMediaPlayer.StoppedState:
+            if self.YangPang_play:
+                self.YangPang()
+
 
     # 영상의 진행 정도에 따른 슬라이드 바 위치 변경
     def positionChanged(self, position):
@@ -225,7 +253,7 @@ class VideoWindow(QMainWindow):
     def durationChanged(self, duration):
         self.positionSlider.setRange(0, duration)
 
-        # -추가 : 슬라이드 이동 간격 설정
+        # - 추가 : 슬라이드 이동 간격 설정
         self.mediaPlayer.setNotifyInterval(1)
 
         # - 추가 : 자동으로 영상크기만큼 윈도우 크기 조절
@@ -270,6 +298,47 @@ class VideoWindow(QMainWindow):
     # - 추가 : 사운드 슬라이드 바 위치에 따른 소리 크기 변경
     def setsoundPosition(self, position):
         self.mediaPlayer.setVolume(position)
+
+
+    # - 추가 : 양팡 유튜브 영상 재생
+    def YangPang(self):
+#        if not self.YangPang_play:
+        if self.YangPang_first == 1:
+            web_url = self.textValue
+
+            with urllib.request.urlopen(web_url) as response:
+                html = response.read()
+                soup = BeautifulSoup(html, 'html.parser')
+                yp_find = soup.find_all("a")
+
+            self.yp_find_list = list()
+            for info in yp_find:
+                if parse("/watch?v={}", info["href"]) != None:
+                    if str(info.find("span",{"class":"stat attribution"})).count('양팡 YangPang') > 0:
+                        self.yp_find_list.append(info["href"])
+                        break
+
+        if self.YangPang_first != 1:
+            web_url = "https://www.youtube.com/channel/UCMVC92EOs9yDJG5JS-CMesQ/videos"
+            self.YangPang_first = 1 
+
+            with urllib.request.urlopen(web_url) as response:
+                html = response.read()
+                soup = BeautifulSoup(html, 'html.parser')
+                yp_find = soup.find_all("a")
+
+            self.yp_find_list = list()
+            for info in yp_find:
+                if parse("/watch?v={}", info["href"]) != None:
+                    self.yp_find_list.append(info["href"])
+
+        self.YangPang_play = True
+        cnt = len(self.yp_find_list) - 1
+        
+        self.textValue = "https://www.youtube.com/" + str(self.yp_find_list[random.randint(0, cnt)])
+        self.setWindowTitle("양팡플레이어") 
+        self.connect_video()
+        self.play()
 
 
 
