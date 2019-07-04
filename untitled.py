@@ -1,12 +1,12 @@
 # PyQt5 Video player
 #!/usr/bin/env python
 
-from PyQt5.QtCore              import QDir, Qt, QUrl, QSizeF, QRect
+from PyQt5.QtCore              import QDir, Qt, QUrl, QSizeF, QRect, QModelIndex, pyqtSlot
 from PyQt5.QtMultimedia        import QMediaContent, QMediaPlayer
 from PyQt5.QtMultimediaWidgets import QVideoWidget
 from PyQt5.QtWidgets           import QApplication, QFileDialog, QHBoxLayout, QLabel, QPushButton, QSizePolicy, QSlider, QStyle, QVBoxLayout, QWidget
-from PyQt5.QtWidgets           import QMainWindow,QWidget, QPushButton, QAction, QLineEdit, QGraphicsOpacityEffect
-from PyQt5.QtGui               import QIcon, QPixmap
+from PyQt5.QtWidgets           import QMainWindow, QWidget, QPushButton, QAction, QLineEdit, QGraphicsOpacityEffect, QListView
+from PyQt5.QtGui               import QIcon, QPixmap, QStandardItem, QStandardItemModel
 from parse                     import *
 from bs4                       import BeautifulSoup
 import sys
@@ -16,16 +16,18 @@ import urllib.parse
 import random
 
 
-class VideoWindow(QMainWindow):
 
+class VideoWindow(QMainWindow):
     def __init__(self, parent=None):
         super(VideoWindow, self).__init__(parent)
         self.first = True
+
         # -추가 : 양팡관련
         self.YangPang_play = False
         self.YangPang_first = 0
 
         global player
+        global channel_ls
         
         # 제목 표시줄
         self.setWindowTitle("PyQt Video Player Widget Example - pythonprogramminglanguage.com") 
@@ -91,6 +93,11 @@ class VideoWindow(QMainWindow):
         exitAction.setStatusTip('Exit application')
         exitAction.triggered.connect(self.exitCall)
 
+        # - 추가 : 메뉴의 channel add 생성
+        channelAction = QAction(QIcon('exit.png'), '&Channel', self)        
+        channelAction.setStatusTip('Youtube channel set')
+        channelAction.triggered.connect(opensetwin)
+
         # 메뉴바 및 메뉴 생성
         menuBar = self.menuBar()
         fileMenu = menuBar.addMenu('&File')
@@ -98,6 +105,8 @@ class VideoWindow(QMainWindow):
         # 메뉴 목록 추가
         fileMenu.addAction(openAction)
         fileMenu.addAction(exitAction)
+        # - 추가
+        fileMenu.addAction(channelAction)
 
         # centralwidget 부분 추가
         wid = QWidget(self)
@@ -107,6 +116,11 @@ class VideoWindow(QMainWindow):
         self.YB = QPushButton()
         self.YB.setText("양팡 Start")
         self.YB.clicked.connect(self.YangPang)
+
+        # -추가 : 채널관련
+        self.CL = QPushButton()
+        self.CL.setText("채널 Start")
+        self.CL.clicked.connect(self.ChannelVideo)
 
         # 레이아웃을 생성하고 위에서 만들었던 Widget 수평으로 순서대로 추가
         controlLayout = QHBoxLayout()
@@ -128,8 +142,13 @@ class VideoWindow(QMainWindow):
         layout.addWidget(self.videoWidget)
         layout.addLayout(controlLayout)
         layout.addLayout(linkLayout)
+
         # -추가 : 양팡관련
         layout.addWidget(self.YB)
+
+        # -추가 : 채널관련
+        layout.addWidget(self.CL)
+
         layout.addWidget(self.errorLabel)
 
         # CentralWidget에 layout 넣기
@@ -188,6 +207,7 @@ class VideoWindow(QMainWindow):
             self.check_url = False
             self.best = None
 
+
     # 윈도우 종료 함수
     def exitCall(self):
         sys.exit(app.exec_())
@@ -197,9 +217,9 @@ class VideoWindow(QMainWindow):
     def connect_video(self):
         # -추가 : 양팡관련
         if not self.YangPang_play:
-            self.textValue = self.textLink.text()
+            self.textValueB = self.textLink.text()
             self.YangPang_first = 0
-        url = self.textValue
+        url = self.textValueB
         if self.textLink.text() != "":
             self.YangPang_play = False
 
@@ -208,6 +228,7 @@ class VideoWindow(QMainWindow):
         self.mediaPlayer.setMedia(QMediaContent(QUrl(self.best.url)))
         self.playButton.setEnabled(True)
         self.check_url = True
+        self.play()
 
     
     # 플레이 버튼 함수
@@ -237,10 +258,14 @@ class VideoWindow(QMainWindow):
             self.playButton.setIcon(self.style().standardIcon(QStyle.SP_MediaPause))
         else:
             self.playButton.setIcon(self.style().standardIcon(QStyle.SP_MediaPlay))
-
+        
+        # 양팡 및 채널 관련
         if self.mediaPlayer.state() == QMediaPlayer.StoppedState:
             if self.YangPang_play:
-                self.YangPang()
+                if self.YangPang_first == 1:
+                    self.YangPang()
+                if self.YangPang_first == 2:
+                    self.ChannelVideo()
 
 
     # 영상의 진행 정도에 따른 슬라이드 바 위치 변경
@@ -302,9 +327,9 @@ class VideoWindow(QMainWindow):
 
     # - 추가 : 양팡 유튜브 영상 재생
     def YangPang(self):
-#        if not self.YangPang_play:
+        # if not self.YangPang_play:
         if self.YangPang_first == 1:
-            web_url = self.textValue
+            web_url = self.textValueB
 
             with urllib.request.urlopen(web_url) as response:
                 html = response.read()
@@ -335,16 +360,143 @@ class VideoWindow(QMainWindow):
         self.YangPang_play = True
         cnt = len(self.yp_find_list) - 1
         
-        self.textValue = "https://www.youtube.com/" + str(self.yp_find_list[random.randint(0, cnt)])
+        self.textValueB = "https://www.youtube.com/" + str(self.yp_find_list[random.randint(0, cnt)])
         self.setWindowTitle("양팡플레이어") 
         self.connect_video()
-        self.play()
+        
+        
+    def ChannelVideo(self):       
+        if self.YangPang_first == 2:
+            web_url = self.textValueB
 
+            with urllib.request.urlopen(web_url) as response:
+                html = response.read()
+                soup = BeautifulSoup(html, 'html.parser')
+                yp_find = soup.find_all("a")
+
+            self.yp_find_list = list()
+            for info in yp_find:
+                if parse("/watch?v={}", info["href"]) != None:
+                    if str(info.find("span",{"class":"stat attribution"})).count(self.name) > 0:
+                        self.yp_find_list.append(info["href"])
+                        break
+            
+            k = random.randint(0, 1)
+            if k == 0:
+                self.YangPang_first = 0
+
+        if self.YangPang_first != 2:
+            web_url = channel_ls[random.randint(0, len(channel_ls) - 1)]
+            self.YangPang_first = 2 
+
+            with urllib.request.urlopen(web_url) as response:
+                html = response.read()
+                soup = BeautifulSoup(html, 'html.parser')
+                yp_find = soup.find_all("a")
+                self.name_ls = soup.find_all("img")
+
+            for info in self.name_ls:
+                if info["alt"] != None:
+                    self.name = info["alt"]
+                    break
+
+            self.yp_find_list = list()
+            for info in yp_find:
+                if parse("/watch?v={}", info["href"]) != None:
+                    self.yp_find_list.append(info["href"])        
+
+        self.YangPang_play = True
+        cnt = len(self.yp_find_list) - 1
+        
+        self.textValueB = "https://www.youtube.com/" + str(self.yp_find_list[random.randint(0, cnt)])
+        self.setWindowTitle("랜덤플레이어") 
+        self.connect_video()
+        
+
+# - 추가 : 채널 목록의 크리에이터 영상 랜덤재생
+class ChannelList(QMainWindow):
+    def __init__(self, parent = None):
+        super(ChannelList, self).__init__(parent)
+        global channel_ls
+
+        self.setWindowTitle("PyQt Video Player Widget Example - pythonprogramminglanguage.com") 
+        self.now_slot = -1
+
+        # Widget 생성
+        wid            = QWidget(self)
+        self.addButton = QPushButton()
+        self.delButton = QPushButton()
+        self.addText   = QLineEdit()
+        self.ListView  = QListView()
+        self.ItemView  = QStandardItemModel(self.ListView)
+        
+        # Widget 설정
+        self.addButton.setText("추가")
+        self.delButton.setText("제거")
+        self.addButton.clicked.connect(self.add_channel)
+        self.delButton.clicked.connect(self.del_channel)
+        self.ListView.clicked.connect(self.pushedindex)
+        self.addButton.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Maximum)
+        self.delButton.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Maximum)
+        self.addText.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Maximum)
+        self.ListView.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
+
+        # Widget 위치 설정
+        self.setCentralWidget(wid)
+        ButtonLayout = QVBoxLayout()
+        ButtonLayout.addWidget(self.addButton)
+        ButtonLayout.addWidget(self.delButton)
+
+        EditLayout = QHBoxLayout()
+        EditLayout.addWidget(self.addText)
+        EditLayout.addLayout(ButtonLayout)
+
+        WholeLayout = QVBoxLayout()
+        WholeLayout.addLayout(EditLayout)
+        WholeLayout.addWidget(self.ListView)
+        
+        wid.setLayout(WholeLayout)
+        
+    # 채널목록 추가
+    def add_channel(self):
+        self.ItemView.appendRow(QStandardItem(self.addText.text()))
+        channel_ls.append(self.addText.text())
+        self.ListView.setModel(self.ItemView)
+        self.addText.setText("")
+
+        
+    # 채널목록 삭제
+    def del_channel(self):
+        if self.now_slot != -1:
+            self.ItemView.removeRow(self.now_slot)
+            channel_ls.pop(self.now_slot)
+        
+    
+    # 현재 눌린 index 받기
+    @pyqtSlot(QModelIndex)
+    def pushedindex(self, index):
+        self.now_slot = index.row()
+    
+
+
+# - 추가 : 채널설정 window 열기
+def opensetwin():
+    global setting
+
+    setting.resize(500, 300)
+    setting.show()
+    
 
 
 # 메인함수
 if __name__ == '__main__':
+    # 채널 리스트 추가
+    channel_ls = list()
+    
     app = QApplication(sys.argv)
+
+    setting = ChannelList()
+
     player = VideoWindow()
     player.resize(640, 480)
     player.show()
